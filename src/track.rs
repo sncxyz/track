@@ -1,6 +1,6 @@
 use std::{fmt, fs, io, path::PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use bincode::{deserialize, serialize};
 use chrono::{
     serde::{ts_seconds, ts_seconds_option},
@@ -13,7 +13,7 @@ use super::{Bound, Position};
 type DateTime = chrono::DateTime<Utc>;
 
 pub fn create(name: String) -> Result<()> {
-    let mut data = Data::read();
+    let mut data = Data::read()?;
     for info in &data.all {
         if info.name == name {
             bail!("error: An activity with this name already exists");
@@ -41,7 +41,7 @@ pub fn create(name: String) -> Result<()> {
 }
 
 pub fn set(name: String) -> Result<()> {
-    let mut data = Data::read();
+    let mut data = Data::read()?;
     for info in &data.all {
         if info.name == name {
             data.current = Some(info.clone());
@@ -54,7 +54,7 @@ pub fn set(name: String) -> Result<()> {
 }
 
 pub fn delete(name: String) -> Result<()> {
-    let mut data = Data::read();
+    let mut data = Data::read()?;
     let mut i = 0;
     for info in &data.all {
         if info.name == name {
@@ -68,7 +68,7 @@ pub fn delete(name: String) -> Result<()> {
                         data.current = None;
                     }
                 }
-                fs::remove_file(dir().join(removed.id.to_string()))?;
+                fs::remove_file(dir()?.join(removed.id.to_string()))?;
                 data.write()?;
                 println!("Deleted activity \"{name}\"");
             } else {
@@ -82,7 +82,7 @@ pub fn delete(name: String) -> Result<()> {
 }
 
 pub fn current() -> Result<()> {
-    if let Some(info) = &Data::read().current {
+    if let Some(info) = &Data::read()?.current {
         println!("The current activity is \"{}\"", info.name);
     } else {
         println!("There is no activity currently selected");
@@ -91,7 +91,7 @@ pub fn current() -> Result<()> {
 }
 
 pub fn all() -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     if data.all.is_empty() {
         println!("There are currently no recorded activities");
     } else {
@@ -104,7 +104,7 @@ pub fn all() -> Result<()> {
 }
 
 pub fn start() -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     if current.ongoing.is_some() {
         bail!("There is already an ongoing session of activity \"{name}\"");
@@ -121,7 +121,7 @@ pub fn start() -> Result<()> {
 }
 
 pub fn end(notes: String) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     if let Some(start) = current.ongoing {
         current.ongoing = None;
@@ -138,7 +138,7 @@ pub fn end(notes: String) -> Result<()> {
 }
 
 pub fn cancel() -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     if current.ongoing.is_some() {
         current.ongoing = None;
@@ -150,7 +150,7 @@ pub fn cancel() -> Result<()> {
 }
 
 pub fn ongoing() -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (current, name) = data.read_current()?;
     if let Some(start) = current.ongoing {
         let local = local(start);
@@ -166,7 +166,7 @@ pub fn ongoing() -> Result<()> {
 }
 
 pub fn add(start: NaiveDateTime, end: NaiveDateTime, notes: String) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     let start = parse_date_time(start);
     let end = parse_date_time(end);
@@ -183,7 +183,7 @@ pub fn edit(
     end: Option<NaiveDateTime>,
     notes: Option<String>,
 ) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     let i = current.parse_index(pos)?;
     let old_string = current.get(i);
@@ -201,7 +201,7 @@ pub fn edit(
 }
 
 pub fn remove(pos: Position) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     let i = current.parse_index(pos)?;
     println!("{}", current.get(i));
@@ -222,7 +222,7 @@ pub fn remove(pos: Position) -> Result<()> {
 }
 
 pub fn list(from: Bound, to: Bound) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (current, name) = data.read_current()?;
     let (from, to) = current.convert_bounds(from, to)?;
     let (i, j) = current.get_in_range(from, to);
@@ -244,7 +244,7 @@ pub fn list(from: Bound, to: Bound) -> Result<()> {
 }
 
 pub fn stats(from: Bound, to: Bound) -> Result<()> {
-    let data = Data::read();
+    let data = Data::read()?;
     let (current, name) = data.read_current()?;
     let (from, to) = current.convert_bounds(from, to)?;
     let (i, j) = current.get_in_range(from, to);
@@ -297,29 +297,29 @@ struct Data {
 }
 
 impl Data {
-    fn read() -> Data {
-        if let Ok(encoded) = fs::read(dir().join("data")) {
-            deserialize(&encoded).unwrap()
+    fn read() -> Result<Data> {
+        Ok(if let Ok(encoded) = fs::read(dir()?.join("data")) {
+            deserialize(&encoded)?
         } else {
             Self {
                 current: None,
                 all: Vec::new(),
             }
-        }
+        })
     }
 
     fn write(&self) -> Result<()> {
-        if !dir().exists() {
-            fs::create_dir(dir())?;
+        if !dir()?.exists() {
+            fs::create_dir(dir()?)?;
         }
-        fs::write(dir().join("data"), serialize(self).unwrap())?;
+        fs::write(dir()?.join("data"), serialize(self)?)?;
         Ok(())
     }
 
     fn read_current(&self) -> Result<(Activity, &str)> {
         if let Some(info) = &self.current {
             Ok((
-                deserialize(&fs::read(dir().join(info.id.to_string()))?).unwrap(),
+                deserialize(&fs::read(dir()?.join(info.id.to_string()))?)?,
                 &info.name,
             ))
         } else {
@@ -360,7 +360,7 @@ impl Activity {
     }
 
     fn write(&self, id: u32) -> Result<()> {
-        fs::write(dir().join(id.to_string()), serialize(self).unwrap())?;
+        fs::write(dir()?.join(id.to_string()), serialize(self)?)?;
         Ok(())
     }
 
@@ -519,8 +519,10 @@ fn range_display(from: DateTime, to: DateTime) -> String {
     format!("{} to {}", from.format("%d/%m/%y %R"), to.format(to_format))
 }
 
-fn dir() -> PathBuf {
-    dirs::data_local_dir().unwrap().join("track")
+fn dir() -> Result<PathBuf> {
+    Ok(dirs::data_local_dir()
+        .ok_or(anyhow!("error: Failed to find user data directory"))?
+        .join("track"))
 }
 
 fn local(date_time: DateTime) -> chrono::DateTime<Local> {
