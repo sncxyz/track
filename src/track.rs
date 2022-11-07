@@ -1,4 +1,4 @@
-use std::{env, fmt, fs, io, path::PathBuf};
+use std::{fmt, fs, io, path::PathBuf};
 
 use anyhow::{bail, Result};
 use bincode::{deserialize, serialize};
@@ -520,10 +520,7 @@ fn range_display(from: DateTime, to: DateTime) -> String {
 }
 
 fn dir() -> PathBuf {
-    let mut path = env::current_exe().unwrap();
-    path.pop();
-    path.push("data");
-    path
+    dirs::data_local_dir().unwrap().join("track")
 }
 
 fn local(date_time: DateTime) -> chrono::DateTime<Local> {
