@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[clap(about)]
-/// An app for tracking the time you spend on different activities
+/// A CLI for tracking time spent on different activities
 struct Cli {
     #[command(subcommand)]
     command: Command,
