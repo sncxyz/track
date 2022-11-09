@@ -1,4 +1,8 @@
-use std::{fmt, fs, io, path::PathBuf};
+use std::{
+    fmt, fs,
+    io::{self, Write},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, bail, Result};
 use bincode::{deserialize, serialize};
@@ -58,7 +62,8 @@ pub fn delete(name: String) -> Result<()> {
     let mut i = 0;
     for info in &data.all {
         if info.name == name {
-            println!("Are you sure you want to delete activity \"{name}\"? Enter \"y\" if so");
+            print!("Are you sure you want to delete activity \"{name}\"? Enter \"y\" if so: ");
+            io::stdout().flush()?;
             let mut input = String::new();
             io::stdin().read_line(&mut input)?;
             if input.trim() == "y" {
@@ -205,10 +210,8 @@ pub fn remove(pos: Position) -> Result<()> {
     let (mut current, name) = data.read_current()?;
     let i = current.parse_index(pos)?;
     println!("{}", current.get(i));
-    println!();
-    println!(
-        "Are you sure you want to remove this session from activity \"{name}\"? Enter \"y\" if so"
-    );
+    print!("Are you sure you want to remove this session from activity \"{name}\"? Enter \"y\" if so: ");
+    io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     if input.trim() == "y" {
@@ -376,7 +379,7 @@ impl Activity {
             let other = &self.sessions[i];
             if end >= other.start {
                 if other.end >= start {
-                    bail!("error: Session overlaps existing session");
+                    bail!("error: Session overlaps existing session:\n{}", self.get(i));
                 }
             } else {
                 break;
