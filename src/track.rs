@@ -13,7 +13,7 @@ use chrono::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{Bound, Position, TimeSpecifier};
+use super::{Absolute, Bound, Position};
 
 type DateTime = chrono::DateTime<Utc>;
 
@@ -53,6 +53,24 @@ pub fn set(name: String) -> Result<()> {
     bail!("error: No activity with this name exists");
 }
 
+pub fn rename(from: String, to: String) -> Result<()> {
+    let mut data = Data::read()?;
+    for info in &mut data.all {
+        if info.name == from {
+            info.name = to.clone();
+            if let Some(current) = &data.current {
+                if current.id == info.id {
+                    data.current = Some(info.clone());
+                }
+            }
+            data.write()?;
+            println!("Renamed activity \"{from}\" to \"{to}\"");
+            return Ok(());
+        }
+    }
+    bail!("error: No activity with this name exists")
+}
+
 pub fn delete(name: String) -> Result<()> {
     let mut data = Data::read()?;
     for (i, info) in data.all.iter().enumerate() {
@@ -78,24 +96,6 @@ pub fn delete(name: String) -> Result<()> {
         }
     }
     bail!("error: No activity with this name exists");
-}
-
-pub fn rename(from: String, to: String) -> Result<()> {
-    let mut data = Data::read()?;
-    for info in &mut data.all {
-        if info.name == from {
-            info.name = to.clone();
-            if let Some(current) = &data.current {
-                if current.id == info.id {
-                    data.current = Some(info.clone());
-                }
-            }
-            data.write()?;
-            println!("Renamed activity \"{from}\" to \"{to}\"");
-            return Ok(());
-        }
-    }
-    bail!("error: No activity with this name exists")
 }
 
 pub fn current() -> Result<()> {
@@ -182,7 +182,7 @@ pub fn ongoing() -> Result<()> {
     Ok(())
 }
 
-pub fn add(start: TimeSpecifier, end: TimeSpecifier, notes: String) -> Result<()> {
+pub fn add(start: Absolute, end: Absolute, notes: String) -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     let start = parse_start(start);
@@ -196,8 +196,8 @@ pub fn add(start: TimeSpecifier, end: TimeSpecifier, notes: String) -> Result<()
 
 pub fn edit(
     pos: Position,
-    start: Option<TimeSpecifier>,
-    end: Option<TimeSpecifier>,
+    start: Option<Absolute>,
+    end: Option<Absolute>,
     notes: Option<String>,
 ) -> Result<()> {
     let data = Data::read()?;
@@ -209,7 +209,7 @@ pub fn edit(
     let old_string = current.get(i);
     let old = current.sessions.remove(i);
     let start = start.map(parse_start).unwrap_or(old.start);
-    let end = end.map(|ts| parse_end(ts, start)).unwrap_or(old.end);
+    let end = end.map(|abs| parse_end(abs, start)).unwrap_or(old.end);
     let notes = notes.unwrap_or_else(|| old.notes.clone());
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
@@ -445,7 +445,7 @@ impl Activity {
         }
         let now = Utc::now();
         let from = match from {
-            Bound::TimeSpecifier(ts) => parse_start(ts),
+            Bound::Absolute(abs) => parse_start(abs),
             Bound::Ago {
                 weeks,
                 days,
@@ -467,7 +467,7 @@ impl Activity {
             _ => unreachable!(),
         };
         let to = match to {
-            Bound::TimeSpecifier(ts) => parse_end(ts, from),
+            Bound::Absolute(abs) => parse_end(abs, from),
             Bound::None => self.sessions[self.last()].end,
             Bound::Now => now,
             _ => unreachable!(),
@@ -584,18 +584,18 @@ fn to_utc(date_time: chrono::DateTime<Local>) -> DateTime {
     date_time.into()
 }
 
-fn parse_start(ts: TimeSpecifier) -> DateTime {
-    to_utc(match ts {
-        TimeSpecifier::DateTime(naive) => parse_date_time(naive),
-        TimeSpecifier::Date(naive) => parse_date(naive).and_hms(0, 0, 0),
-        TimeSpecifier::Time(naive) => Local::now().date().and_time(naive).unwrap(),
+fn parse_start(abs: Absolute) -> DateTime {
+    to_utc(match abs {
+        Absolute::DateTime(naive) => parse_date_time(naive),
+        Absolute::Date(naive) => parse_date(naive).and_hms(0, 0, 0),
+        Absolute::Time(naive) => Local::now().date().and_time(naive).unwrap(),
     })
 }
 
-fn parse_end(ts: TimeSpecifier, start: DateTime) -> DateTime {
-    to_utc(match ts {
-        TimeSpecifier::DateTime(naive) => parse_date_time(naive),
-        TimeSpecifier::Date(naive) => parse_date(naive).succ().and_hms(0, 0, 0),
-        TimeSpecifier::Time(naive) => to_local(start).date().and_time(naive).unwrap(),
+fn parse_end(abs: Absolute, start: DateTime) -> DateTime {
+    to_utc(match abs {
+        Absolute::DateTime(naive) => parse_date_time(naive),
+        Absolute::Date(naive) => parse_date(naive).succ().and_hms(0, 0, 0),
+        Absolute::Time(naive) => to_local(start).date().and_time(naive).unwrap(),
     })
 }

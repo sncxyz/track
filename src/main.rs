@@ -50,7 +50,7 @@ enum Command {
     /// End tracking of the ongoing session
     End {
         /// Optional notes
-        #[arg(short, long, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
+        #[arg(short, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
         notes: String,
     },
     /// Cancel tracking of the ongoing session
@@ -63,13 +63,13 @@ enum Command {
     )]
     Add {
         /// Session start
-        #[arg(short, long, value_parser = parse_ts)]
-        start: TimeSpecifier,
+        #[arg(value_parser = parse_abs)]
+        start: Absolute,
         /// Session end
-        #[arg(short, long, value_parser = parse_ts)]
-        end: TimeSpecifier,
+        #[arg(value_parser = parse_abs)]
+        end: Absolute,
         /// Optional notes
-        #[arg(short, long, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
+        #[arg(short, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
         notes: String,
     },
     #[clap(
@@ -81,13 +81,13 @@ enum Command {
         #[arg(value_parser = parse_position)]
         position: Position,
         /// New session start
-        #[arg(short, long, value_parser = parse_ts)]
-        start: Option<TimeSpecifier>,
+        #[arg(short, value_parser = parse_abs)]
+        start: Option<Absolute>,
         /// New session end
-        #[arg(short, long, value_parser = parse_ts)]
-        end: Option<TimeSpecifier>,
+        #[arg(short, value_parser = parse_abs)]
+        end: Option<Absolute>,
         /// New notes
-        #[arg(short, long, value_parser = parse_notes)]
+        #[arg(short, value_parser = parse_notes)]
         notes: Option<String>,
     },
     #[clap(
@@ -120,32 +120,32 @@ enum RangeCommand {
     long_about = PAST_ABOUT)]
     Past {
         /// Number of weeks
-        #[arg(short, long, default_value_t = 0, hide_default_value = true)]
+        #[arg(short, default_value_t = 0, hide_default_value = true)]
         weeks: u32,
         /// Number of days
-        #[arg(short, long, default_value_t = 0, hide_default_value = true)]
+        #[arg(short, default_value_t = 0, hide_default_value = true)]
         days: u32,
         /// Number of hours
-        #[arg(short = 'H', long, default_value_t = 0, hide_default_value = true)]
+        #[arg(short = 'H', default_value_t = 0, hide_default_value = true)]
         hours: u32,
         /// Number of minutes
-        #[arg(short = 'M', long, default_value_t = 0, hide_default_value = true)]
+        #[arg(short = 'M', default_value_t = 0, hide_default_value = true)]
         minutes: u32,
     },
     #[clap(about = "Sessions ranging between a specific time, and now", long_about = SINCE_ABOUT)]
     Since {
         /// Start of the range
-        #[arg(value_parser = parse_ts)]
-        start: Option<TimeSpecifier>,
+        #[arg(value_parser = parse_abs)]
+        start: Option<Absolute>,
     },
     #[clap(about = "Sessions ranging between two specific times", long_about = RANGE_ABOUT)]
     Range {
         /// Start of the range
-        #[arg(short, long, value_parser = parse_ts)]
-        start: Option<TimeSpecifier>,
+        #[arg(short, value_parser = parse_abs)]
+        start: Option<Absolute>,
         /// End of the range
-        #[arg(short, long, value_parser = parse_ts)]
-        end: Option<TimeSpecifier>,
+        #[arg(short, value_parser = parse_abs)]
+        end: Option<Absolute>,
     },
     /// Sessions on a specific date
     On {
@@ -212,11 +212,11 @@ fn get_bounds(command: Option<RangeCommand>) -> (Bound, Bound) {
                 },
                 Bound::Now,
             ),
-            RangeCommand::Since { start } => (map_ts(start), Bound::Now),
-            RangeCommand::Range { start, end } => (map_ts(start), map_ts(end)),
+            RangeCommand::Since { start } => (to_bound(start), Bound::Now),
+            RangeCommand::Range { start, end } => (to_bound(start), to_bound(end)),
             RangeCommand::On { date } => (
-                Bound::TimeSpecifier(TimeSpecifier::Date(date)),
-                Bound::TimeSpecifier(TimeSpecifier::Date(date)),
+                Bound::Absolute(Absolute::Date(date)),
+                Bound::Absolute(Absolute::Date(date)),
             ),
         }
     } else {
@@ -252,13 +252,13 @@ fn parse_date(s: &str) -> Result<NaiveDate, String> {
         .map_err(|_| "date must be in the form [dd/mm/yy]".to_string())
 }
 
-fn parse_ts(s: &str) -> Result<TimeSpecifier, String> {
+fn parse_abs(s: &str) -> Result<Absolute, String> {
     if let Ok(date_time) = NaiveDateTime::parse_from_str(s, "%d/%m/%y %R") {
-        return Ok(TimeSpecifier::DateTime(date_time));
+        return Ok(Absolute::DateTime(date_time));
     } else if let Ok(date) = NaiveDate::parse_from_str(s, "%d/%m/%y") {
-        return Ok(TimeSpecifier::Date(date));
+        return Ok(Absolute::Date(date));
     } else if let Ok(time) = NaiveTime::parse_from_str(s, "%R") {
-        return Ok(TimeSpecifier::Time(time));
+        return Ok(Absolute::Time(time));
     }
     Err("must be in the form [dd/mm/yy] or [HH:MM] or [dd/mm/yy HH:MM]".to_string())
 }
@@ -273,7 +273,7 @@ pub enum Position {
 pub enum Bound {
     None,
     Now,
-    TimeSpecifier(TimeSpecifier),
+    Absolute(Absolute),
     Ago {
         weeks: u32,
         days: u32,
@@ -293,15 +293,15 @@ impl Bound {
 }
 
 #[derive(Clone, Copy)]
-pub enum TimeSpecifier {
+pub enum Absolute {
     DateTime(NaiveDateTime),
     Date(NaiveDate),
     Time(NaiveTime),
 }
 
-fn map_ts(ts: Option<TimeSpecifier>) -> Bound {
-    if let Some(ts) = ts {
-        Bound::TimeSpecifier(ts)
+fn to_bound(abs: Option<Absolute>) -> Bound {
+    if let Some(abs) = abs {
+        Bound::Absolute(abs)
     } else {
         Bound::None
     }
