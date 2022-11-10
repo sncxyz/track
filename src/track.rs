@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fmt, fs,
     io::{self, Write},
     path::PathBuf,
@@ -8,11 +9,11 @@ use anyhow::{anyhow, bail, Result};
 use bincode::{deserialize, serialize};
 use chrono::{
     serde::{ts_seconds, ts_seconds_option},
-    Duration, Local, NaiveDateTime, TimeZone, Utc,
+    Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc,
 };
 use serde::{Deserialize, Serialize};
 
-use super::{Bound, Position};
+use super::{Bound, Position, TimeSpecifier};
 
 type DateTime = chrono::DateTime<Utc>;
 
@@ -23,15 +24,10 @@ pub fn create(name: String) -> Result<()> {
             bail!("error: An activity with this name already exists");
         }
     }
+    let taken: HashSet<_> = data.all.iter().map(|info| info.id).collect();
     let mut id = 0;
-    loop {
-        for info in &data.all {
-            if info.id == id {
-                id += 1;
-                continue;
-            }
-        }
-        break;
+    while taken.contains(&id) {
+        id += 1;
     }
     println!("Created new activity \"{}\"", name);
     if data.current.is_none() {
@@ -59,8 +55,7 @@ pub fn set(name: String) -> Result<()> {
 
 pub fn delete(name: String) -> Result<()> {
     let mut data = Data::read()?;
-    let mut i = 0;
-    for info in &data.all {
+    for (i, info) in data.all.iter().enumerate() {
         if info.name == name {
             print!("Are you sure you want to delete activity \"{name}\"? Enter \"y\" if so: ");
             io::stdout().flush()?;
@@ -81,7 +76,6 @@ pub fn delete(name: String) -> Result<()> {
             }
             return Ok(());
         }
-        i += 1;
     }
     bail!("error: No activity with this name exists");
 }
@@ -115,7 +109,7 @@ pub fn start() -> Result<()> {
         bail!("There is already an ongoing session of activity \"{name}\"");
     }
     current.ongoing = Some(Utc::now());
-    let local = local(current.ongoing.unwrap());
+    let local = to_local(current.ongoing.unwrap());
     data.write_current(&current)?;
     println!(
         "Started new session of activity \"{name}\" on {} at {}",
@@ -158,7 +152,7 @@ pub fn ongoing() -> Result<()> {
     let data = Data::read()?;
     let (current, name) = data.read_current()?;
     if let Some(start) = current.ongoing {
-        let local = local(start);
+        let local = to_local(start);
         println!(
             "There is an ongoing session of activity \"{name}\" that started on {} at {}",
             local.format("%d/%m/%y"),
@@ -170,11 +164,11 @@ pub fn ongoing() -> Result<()> {
     Ok(())
 }
 
-pub fn add(start: NaiveDateTime, end: NaiveDateTime, notes: String) -> Result<()> {
+pub fn add(start: TimeSpecifier, end: TimeSpecifier, notes: String) -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
-    let start = parse_date_time(start);
-    let end = parse_date_time(end);
+    let start = parse_start(start);
+    let end = parse_end(end, start);
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
     println!("Added a new session of activity \"{name}\":");
@@ -184,17 +178,20 @@ pub fn add(start: NaiveDateTime, end: NaiveDateTime, notes: String) -> Result<()
 
 pub fn edit(
     pos: Position,
-    start: Option<NaiveDateTime>,
-    end: Option<NaiveDateTime>,
+    start: Option<TimeSpecifier>,
+    end: Option<TimeSpecifier>,
     notes: Option<String>,
 ) -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     let i = current.parse_index(pos)?;
+    if start.is_none() && end.is_none() && notes.is_none() {
+        bail!("error: No edits specified")
+    }
     let old_string = current.get(i);
     let old = current.sessions.remove(i);
-    let start = start.map(parse_date_time).unwrap_or(old.start);
-    let end = end.map(parse_date_time).unwrap_or(old.end);
+    let start = start.map(parse_start).unwrap_or(old.start);
+    let end = end.map(|ts| parse_end(ts, start)).unwrap_or(old.end);
     let notes = notes.unwrap_or_else(|| old.notes.clone());
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
@@ -232,12 +229,12 @@ pub fn list(from: Bound, to: Bound) -> Result<()> {
     if i == j {
         println!(
             "There are no sessions from {} in activity \"{name}\"",
-            range_display(from, to)
+            range_to_string(from, to)
         );
     } else {
         println!(
             "The sessions from {} in activity \"{name}\" are:",
-            range_display(from, to)
+            range_to_string(from, to)
         );
         for k in i..j {
             println!("{}", current.get(k));
@@ -254,18 +251,17 @@ pub fn stats(from: Bound, to: Bound) -> Result<()> {
     if i == j {
         println!(
             "There are no sessions from {} in activity \"{name}\"",
-            range_display(from, to)
+            range_to_string(from, to)
         );
     } else {
         println!(
             "The session statistics from {} in activity \"{name}\" are:",
-            range_display(from, to)
+            range_to_string(from, to)
         );
         println!("Number of sessions: {}", j - i);
-        let sessions = &current.sessions;
         let mut time = Duration::zero();
-        for k in i..j {
-            let (mut start, mut end) = (sessions[k].start, sessions[k].end);
+        for (k, session) in current.sessions.iter().enumerate().take(j).skip(i) {
+            let (mut start, mut end) = (session.start, session.end);
             if k == i {
                 start = start.max(from);
             }
@@ -276,14 +272,14 @@ pub fn stats(from: Bound, to: Bound) -> Result<()> {
         }
         let total = to - from;
         let proportion = time.num_seconds() as f64 / total.num_seconds() as f64;
-        println!("Total time: {}", duration_str(time));
+        println!("Total time: {}", duration_to_string(time));
         println!(
             "Average time per day: {}",
-            duration_str(Duration::seconds((proportion * 60. * 60. * 24.) as i64))
+            duration_to_string(Duration::seconds((proportion * 60. * 60. * 24.) as i64))
         );
         println!(
             "Average session length: {}",
-            duration_str(time / (j - i) as i32)
+            duration_to_string(time / (j - i) as i32)
         );
         println!(
             "Proportion of time spent on activity: {:.1}%",
@@ -421,42 +417,35 @@ impl Activity {
         }
         let now = Utc::now();
         let from = match from {
-            Bound::DateTime(naive) => parse_date_time(naive),
-            Bound::Date(date) => parse_date_time(date.and_hms(0, 0, 0)),
+            Bound::TimeSpecifier(ts) => parse_start(ts),
             Bound::Ago {
                 weeks,
                 days,
                 hours,
                 minutes,
             } => {
-                now - Duration::minutes(
-                    minutes as i64
-                        + hours as i64 * 60
-                        + days as i64 * 24 * 60
-                        + weeks as i64 * 7 * 24 * 60,
-                )
+                if weeks == 0 && days == 0 && hours == 0 && minutes == 0 {
+                    self.sessions[0].start
+                } else {
+                    now - Duration::minutes(
+                        minutes as i64
+                            + hours as i64 * 60
+                            + days as i64 * 24 * 60
+                            + weeks as i64 * 7 * 24 * 60,
+                    )
+                }
             }
             Bound::None => self.sessions[0].start,
             _ => unreachable!(),
         };
         let to = match to {
-            Bound::DateTime(naive) => parse_date_time(naive),
-            Bound::Date(date) => {
-                if Local.from_local_date(&date).unwrap() == Local::now().date() {
-                    now
-                } else {
-                    parse_date_time(date.succ().and_hms(0, 0, 0))
-                }
-            }
+            Bound::TimeSpecifier(ts) => parse_end(ts, from),
             Bound::None => self.sessions[self.last()].end,
             Bound::Now => now,
             _ => unreachable!(),
         };
         if from >= to {
             bail!("error: Start of range must be before end");
-        }
-        if to > now {
-            bail!("error: Range must not end in the future");
         }
         Ok((from, to))
     }
@@ -492,8 +481,7 @@ impl Session {
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let duration = duration_str(self.end - self.start);
-        write!(f, "{} ({duration})", range_display(self.start, self.end))?;
+        write!(f, "{}", range_to_string(self.start, self.end))?;
         if !self.notes.is_empty() {
             write!(f, " - {}", self.notes)?;
         }
@@ -501,33 +489,78 @@ impl fmt::Display for Session {
     }
 }
 
-fn parse_date_time(naive: NaiveDateTime) -> DateTime {
-    let local = Local.from_local_datetime(&naive).unwrap();
-    local.into()
-}
-
-fn duration_str(duration: Duration) -> String {
+fn duration_to_string(duration: Duration) -> String {
     let hours = duration.num_hours();
     let mins = duration.num_minutes() - hours * 60;
-    format!("{hours}h {mins}m")
+    let secs = duration.num_seconds() - hours * 60 * 60 - mins * 60;
+    if hours == 0 && mins == 0 {
+        format!("{secs}s")
+    } else {
+        let hm = if hours == 0 {
+            format!("{mins}m")
+        } else if mins == 0 {
+            format!("{hours}h")
+        } else {
+            format!("{hours}h {mins}m")
+        };
+        if secs == 0 {
+            hm
+        } else {
+            format!("{hm} {secs}s")
+        }
+    }
 }
 
-fn range_display(from: DateTime, to: DateTime) -> String {
-    let (from, to) = (local(from), local(to));
+fn range_to_string(from: DateTime, to: DateTime) -> String {
+    let (from, to) = (to_local(from), to_local(to));
     let to_format = if from.date() == to.date() {
         "%R"
     } else {
         "%d/%m/%y %R"
     };
-    format!("{} to {}", from.format("%d/%m/%y %R"), to.format(to_format))
+    let duration = duration_to_string(to - from);
+    format!(
+        "{} to {} ({})",
+        from.format("%d/%m/%y %R"),
+        to.format(to_format),
+        duration
+    )
 }
 
 fn dir() -> Result<PathBuf> {
     Ok(dirs::data_local_dir()
-        .ok_or(anyhow!("error: Failed to find user data directory"))?
+        .ok_or_else(|| anyhow!("error: Failed to find user data directory"))?
         .join("track"))
 }
 
-fn local(date_time: DateTime) -> chrono::DateTime<Local> {
+fn parse_date_time(naive: NaiveDateTime) -> chrono::DateTime<Local> {
+    Local.from_local_datetime(&naive).unwrap()
+}
+
+fn parse_date(naive: NaiveDate) -> chrono::Date<Local> {
+    Local.from_local_date(&naive).unwrap()
+}
+
+fn to_local(date_time: DateTime) -> chrono::DateTime<Local> {
     date_time.into()
+}
+
+fn to_utc(date_time: chrono::DateTime<Local>) -> DateTime {
+    date_time.into()
+}
+
+fn parse_start(ts: TimeSpecifier) -> DateTime {
+    to_utc(match ts {
+        TimeSpecifier::DateTime(naive) => parse_date_time(naive),
+        TimeSpecifier::Date(naive) => parse_date(naive).and_hms(0, 0, 0),
+        TimeSpecifier::Time(naive) => Local::now().date().and_time(naive).unwrap(),
+    })
+}
+
+fn parse_end(ts: TimeSpecifier, start: DateTime) -> DateTime {
+    to_utc(match ts {
+        TimeSpecifier::DateTime(naive) => parse_date_time(naive),
+        TimeSpecifier::Date(naive) => parse_date(naive).succ().and_hms(0, 0, 0),
+        TimeSpecifier::Time(naive) => to_local(start).date().and_time(naive).unwrap(),
+    })
 }

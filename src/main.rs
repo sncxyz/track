@@ -1,7 +1,7 @@
 mod track;
 
 use anyhow::Result;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -44,55 +44,61 @@ enum Command {
         #[arg(short, long, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
         notes: String,
     },
-    /// Cancel ongoing tracking of a session
+    /// Cancel tracking of the ongoing session
     Cancel,
     /// Display details of the ongoing session
     Ongoing,
-    /// Add a new session
+    #[clap(
+        about = "Add a new session",
+        long_about = ADD_ABOUT
+    )]
     Add {
-        /// Start date and time [dd/mm/yy HH:MM]
-        #[arg(short, long, value_parser = parse_date_time)]
-        start: NaiveDateTime,
-        /// End date and time [dd/mm/yy HH:MM]
-        #[arg(short, long, value_parser = parse_date_time)]
-        end: NaiveDateTime,
+        /// Session start
+        #[arg(short, long, value_parser = parse_ts)]
+        start: TimeSpecifier,
+        /// Session end
+        #[arg(short, long, value_parser = parse_ts)]
+        end: TimeSpecifier,
         /// Optional notes
         #[arg(short, long, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
         notes: String,
     },
-    /// Edit a session
-    ///
-    /// Omit an argument to leave the corresponding value unchanged
+    #[clap(
+        about = "Edit a session",
+        long_about = EDIT_ABOUT
+    )]
     Edit {
-        /// Position of the session to edit (either an index, or [last])
+        /// Position of the session to edit
         #[arg(value_parser = parse_position)]
         position: Position,
-        /// New start date and time [dd/mm/yy HH:MM]
-        #[arg(short, long, value_parser = parse_date_time)]
-        start: Option<NaiveDateTime>,
-        /// New end date and time [dd/mm/yy HH:MM]
-        #[arg(short, long, value_parser = parse_date_time)]
-        end: Option<NaiveDateTime>,
+        /// New session start
+        #[arg(short, long, value_parser = parse_ts)]
+        start: Option<TimeSpecifier>,
+        /// New session end
+        #[arg(short, long, value_parser = parse_ts)]
+        end: Option<TimeSpecifier>,
         /// New notes
         #[arg(short, long, value_parser = parse_notes)]
         notes: Option<String>,
     },
-    /// Remove a session
+    #[clap(
+        about = "Remove a session",
+        long_about = REMOVE_ABOUT)]
     Remove {
-        /// Position of the session to remove (either an index, or [last])
+        /// Position of the session to remove
         #[arg(value_parser = parse_position)]
         position: Position,
     },
-    /// Display full session history, or sessions in a specified time range
-    ///
-    /// Omit <COMMAND> for full session history
+    #[clap(
+        about = "Display full session history, or sessions in a specific time range",
+        long_about = LIST_ABOUT)]
     List {
         #[command(subcommand)]
         range_command: Option<RangeCommand>,
     },
-    /// Display full session statistics, or session statistics in a specified time range
-    ///
-    /// Omit <COMMAND> for full session statistics
+    #[clap(
+        about = "Display full session statistics, or session statistics in a specific time range",
+        long_about = STATS_ABOUT)]
     Stats {
         #[command(subcommand)]
         range_command: Option<RangeCommand>,
@@ -101,7 +107,8 @@ enum Command {
 
 #[derive(Subcommand)]
 enum RangeCommand {
-    /// Sessions ranging between a specified amount of time in the past, and now
+    #[clap(about = "Sessions ranging between a specific amount of time in the past, and now",
+    long_about = PAST_ABOUT)]
     Past {
         /// Number of weeks
         #[arg(short, long, default_value_t = 0, hide_default_value = true)]
@@ -116,26 +123,20 @@ enum RangeCommand {
         #[arg(short = 'M', long, default_value_t = 0, hide_default_value = true)]
         minutes: u32,
     },
-    /// Sessions ranging between a specified time, and now
-    ///
-    /// Omit <FROM> to start from the first session
+    #[clap(about = "Sessions ranging between a specific time, and now", long_about = SINCE_ABOUT)]
     Since {
-        /// Start date, or date and time, of the range ([dd/mm/yy] or [dd/mm/yy HH:MM])
-        #[arg(value_parser = parse_bound)]
-        from: Option<Bound>,
+        /// Start of the range
+        #[arg(value_parser = parse_ts)]
+        start: Option<TimeSpecifier>,
     },
-    /// Sessions ranging between two specified times
-    ///
-    /// Omit <FROM> to start from the first session
-    ///
-    /// Omit <TO> to end at the last session
+    #[clap(about = "Sessions ranging between two specific times", long_about = RANGE_ABOUT)]
     Range {
-        /// Start date, or date and time, of the range ([dd/mm/yy] or [dd/mm/yy HH:MM])
-        #[arg(short, long, value_parser = parse_bound)]
-        from: Option<Bound>,
-        /// End date, or date and time, of the range ([dd/mm/yy] or [dd/mm/yy HH:MM])
-        #[arg(short, long, value_parser = parse_bound)]
-        to: Option<Bound>,
+        /// Start of the range
+        #[arg(short, long, value_parser = parse_ts)]
+        start: Option<TimeSpecifier>,
+        /// End of the range
+        #[arg(short, long, value_parser = parse_ts)]
+        end: Option<TimeSpecifier>,
     },
     /// Sessions on a specific date
     On {
@@ -173,12 +174,12 @@ fn run() -> Result<()> {
         } => track::edit(position, start, end, notes),
         Command::Remove { position } => track::remove(position),
         Command::List { range_command } => {
-            let (from, to) = get_bounds(range_command);
-            track::list(from, to)
+            let (start, end) = get_bounds(range_command);
+            track::list(start, end)
         }
         Command::Stats { range_command } => {
-            let (from, to) = get_bounds(range_command);
-            track::stats(from, to)
+            let (start, end) = get_bounds(range_command);
+            track::stats(start, end)
         }
     }
 }
@@ -200,11 +201,12 @@ fn get_bounds(command: Option<RangeCommand>) -> (Bound, Bound) {
                 },
                 Bound::Now,
             ),
-            RangeCommand::Since { from } => (from.unwrap_or(Bound::None), Bound::Now),
-            RangeCommand::Range { from, to } => {
-                (from.unwrap_or(Bound::None), to.unwrap_or(Bound::None))
-            }
-            RangeCommand::On { date } => (Bound::Date(date), Bound::Date(date)),
+            RangeCommand::Since { start } => (map_ts(start), Bound::Now),
+            RangeCommand::Range { start, end } => (map_ts(start), map_ts(end)),
+            RangeCommand::On { date } => (
+                Bound::TimeSpecifier(TimeSpecifier::Date(date)),
+                Bound::TimeSpecifier(TimeSpecifier::Date(date)),
+            ),
         }
     } else {
         (Bound::None, Bound::None)
@@ -225,17 +227,12 @@ fn parse_notes(s: &str) -> Result<String, String> {
 
 fn parse_position(s: &str) -> Result<Position, String> {
     if s == "last" {
-        return Ok(Position::Last);
+        Ok(Position::Last)
     } else if let Ok(i) = s.parse() {
-        return Ok(Position::Index(i));
+        Ok(Position::Index(i))
     } else {
-        return Err("index must be either [last] or a non-negative integer".to_string());
+        Err("index must be either [last] or a non-negative integer".to_string())
     }
-}
-
-fn parse_date_time(s: &str) -> Result<NaiveDateTime, String> {
-    NaiveDateTime::parse_from_str(s, "%d/%m/%y %R")
-        .map_err(|_| "date and time must be in the form [dd/mm/yy HH:MM]".to_string())
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate, String> {
@@ -243,13 +240,15 @@ fn parse_date(s: &str) -> Result<NaiveDate, String> {
         .map_err(|_| "date must be in the form [dd/mm/yy]".to_string())
 }
 
-fn parse_bound(s: &str) -> Result<Bound, String> {
+fn parse_ts(s: &str) -> Result<TimeSpecifier, String> {
     if let Ok(date_time) = NaiveDateTime::parse_from_str(s, "%d/%m/%y %R") {
-        return Ok(Bound::DateTime(date_time));
+        return Ok(TimeSpecifier::DateTime(date_time));
     } else if let Ok(date) = NaiveDate::parse_from_str(s, "%d/%m/%y") {
-        return Ok(Bound::Date(date));
+        return Ok(TimeSpecifier::Date(date));
+    } else if let Ok(time) = NaiveTime::parse_from_str(s, "%R") {
+        return Ok(TimeSpecifier::Time(time));
     }
-    Err("must be in the form [dd/mm/yy] or [dd/mm/yy HH:MM]".to_string())
+    Err("must be in the form [dd/mm/yy] or [HH:MM] or [dd/mm/yy HH:MM]".to_string())
 }
 
 #[derive(Clone)]
@@ -262,8 +261,7 @@ pub enum Position {
 pub enum Bound {
     None,
     Now,
-    DateTime(NaiveDateTime),
-    Date(NaiveDate),
+    TimeSpecifier(TimeSpecifier),
     Ago {
         weeks: u32,
         days: u32,
@@ -271,3 +269,82 @@ pub enum Bound {
         minutes: u32,
     },
 }
+
+#[derive(Clone, Copy)]
+pub enum TimeSpecifier {
+    DateTime(NaiveDateTime),
+    Date(NaiveDate),
+    Time(NaiveTime),
+}
+
+fn map_ts(ts: Option<TimeSpecifier>) -> Bound {
+    if let Some(ts) = ts {
+        Bound::TimeSpecifier(ts)
+    } else {
+        Bound::None
+    }
+}
+
+const ADD_ABOUT: &str = "Add a new session
+    
+<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+         [dd/mm/yy]       - 00:00 on dd/mm/yy
+         [HH:MM]          - HH:MM on today's date
+
+<END>:   [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+         [dd/mm/yy]       - 00:00 the day after dd/mm/yy
+         [HH:MM]          - HH:MM on <START>'s date";
+
+const EDIT_ABOUT: &str = "Edit a session
+
+<POSITION>: [index]          - index of the session, as shown in track list
+            \"last\"           - last recorded session
+    
+<START>:    [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+            [dd/mm/yy]       - 00:00 on dd/mm/yy
+            [HH:MM]          - HH:MM on today's date
+            omitted          - leave unchanged
+
+<END>:      [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+            [dd/mm/yy]       - 00:00 the day after dd/mm/yy
+            [HH:MM]          - HH:MM on <START>'s date
+            omitted          - leave unchanged
+            
+Omit <NOTES> to leave notes unchanged";
+
+const REMOVE_ABOUT: &str = "Remove a session
+
+<POSITION>: [index]          - index of the session, as shown in track list
+            \"last\"           - last recorded session";
+
+const LIST_ABOUT: &str = "Display full session history, or sessions in a specific time range
+
+Omit <COMMAND> for full session history";
+
+const STATS_ABOUT: &str =
+    "Display full session statistics, or sessions statistics in a specific time range
+
+Omit <COMMAND> for full session statistics";
+
+const PAST_ABOUT: &str = "Sessions ranging between a specific amount of time in the past, and now
+
+Omit all arguments to start from the first session";
+
+const SINCE_ABOUT: &str = "Sessions ranging between a specific time, and now
+
+<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+         [dd/mm/yy]       - 00:00 on dd/mm/yy
+         [HH:MM]          - HH:MM on today's date
+         omitted          - start of first recorded session";
+
+const RANGE_ABOUT: &str = "Sessions ranging between two specific times
+
+<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+         [dd/mm/yy]       - 00:00 on dd/mm/yy
+         [HH:MM]          - HH:MM on today's date
+         omitted          - start of first recorded session
+         
+<END>:   [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+         [dd/mm/yy]       - 00:00 the day after dd/mm/yy
+         [HH:MM]          - HH:MM on <START>'s date
+         omitted          - end of last recorded session";
