@@ -80,6 +80,24 @@ pub fn delete(name: String) -> Result<()> {
     bail!("error: No activity with this name exists");
 }
 
+pub fn rename(from: String, to: String) -> Result<()> {
+    let mut data = Data::read()?;
+    for info in &mut data.all {
+        if info.name == from {
+            info.name = to.clone();
+            if let Some(current) = &data.current {
+                if current.id == info.id {
+                    data.current = Some(info.clone());
+                }
+            }
+            data.write()?;
+            println!("Renamed activity \"{from}\" to \"{to}\"");
+            return Ok(());
+        }
+    }
+    bail!("error: No activity with this name exists")
+}
+
 pub fn current() -> Result<()> {
     if let Some(info) = &Data::read()?.current {
         println!("The current activity is \"{}\"", info.name);
@@ -222,20 +240,25 @@ pub fn remove(pos: Position) -> Result<()> {
 }
 
 pub fn list(from: Bound, to: Bound) -> Result<()> {
+    let all = from.is_none() && to.is_none();
     let data = Data::read()?;
     let (current, name) = data.read_current()?;
     let (from, to) = current.convert_bounds(from, to)?;
     let (i, j) = current.get_in_range(from, to);
+    let text = format!(
+        "{}in activity \"{name}\"",
+        if all {
+            String::new()
+        } else {
+            let range = range_to_string(from, to);
+            let duration = dur_to_string(to - from);
+            format!("from {} ({}) ", range, duration)
+        }
+    );
     if i == j {
-        println!(
-            "There are no sessions from {} in activity \"{name}\"",
-            range_to_string(from, to)
-        );
+        println!("There are no sessions {text}");
     } else {
-        println!(
-            "The sessions from {} in activity \"{name}\" are:",
-            range_to_string(from, to)
-        );
+        println!("The sessions {text} are:");
         for k in i..j {
             println!("{}", current.get(k));
         }
@@ -244,20 +267,25 @@ pub fn list(from: Bound, to: Bound) -> Result<()> {
 }
 
 pub fn stats(from: Bound, to: Bound) -> Result<()> {
+    let all = from.is_none() && to.is_none();
     let data = Data::read()?;
     let (current, name) = data.read_current()?;
     let (from, to) = current.convert_bounds(from, to)?;
     let (i, j) = current.get_in_range(from, to);
+    let text = format!(
+        "{}in activity \"{name}\"",
+        if all {
+            String::new()
+        } else {
+            let range = range_to_string(from, to);
+            let duration = dur_stat(to - from);
+            format!("from {} ({}) ", range, duration)
+        }
+    );
     if i == j {
-        println!(
-            "There are no sessions from {} in activity \"{name}\"",
-            range_to_string(from, to)
-        );
+        println!("There are no sessions {text}");
     } else {
-        println!(
-            "The session statistics from {} in activity \"{name}\" are:",
-            range_to_string(from, to)
-        );
+        println!("The sessions statistics {text} are:");
         println!("Number of sessions: {}", j - i);
         let mut time = Duration::zero();
         for (k, session) in current.sessions.iter().enumerate().take(j).skip(i) {
@@ -272,14 +300,14 @@ pub fn stats(from: Bound, to: Bound) -> Result<()> {
         }
         let total = to - from;
         let proportion = time.num_seconds() as f64 / total.num_seconds() as f64;
-        println!("Total time: {}", duration_to_string(time));
+        println!("Total time: {}", dur_stat(time));
         println!(
             "Average time per day: {}",
-            duration_to_string(Duration::seconds((proportion * 60. * 60. * 24.) as i64))
+            dur_stat(Duration::seconds((proportion * 60. * 60. * 24.) as i64))
         );
         println!(
             "Average session length: {}",
-            duration_to_string(time / (j - i) as i32)
+            dur_stat(time / (j - i) as i32)
         );
         println!(
             "Proportion of time spent on activity: {:.1}%",
@@ -481,7 +509,9 @@ impl Session {
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", range_to_string(self.start, self.end))?;
+        let range = range_to_string(self.start, self.end);
+        let duration = dur_to_string(self.end - self.start);
+        write!(f, "{} ({})", range, duration)?;
         if !self.notes.is_empty() {
             write!(f, " - {}", self.notes)?;
         }
@@ -489,7 +519,18 @@ impl fmt::Display for Session {
     }
 }
 
-fn duration_to_string(duration: Duration) -> String {
+fn dur_to_string(duration: Duration) -> String {
+    let hours = duration.num_hours();
+    let mins = duration.num_minutes() - hours * 60;
+    let secs = duration.num_seconds() - hours * 60 * 60 - mins * 60;
+    if secs == 0 {
+        format!("{hours}h {mins}m")
+    } else {
+        format!("{hours}h {}m", mins + 1)
+    }
+}
+
+fn dur_stat(duration: Duration) -> String {
     let hours = duration.num_hours();
     let mins = duration.num_minutes() - hours * 60;
     let secs = duration.num_seconds() - hours * 60 * 60 - mins * 60;
@@ -518,13 +559,7 @@ fn range_to_string(from: DateTime, to: DateTime) -> String {
     } else {
         "%d/%m/%y %R"
     };
-    let duration = duration_to_string(to - from);
-    format!(
-        "{} to {} ({})",
-        from.format("%d/%m/%y %R"),
-        to.format(to_format),
-        duration
-    )
+    format!("{} to {}", from.format("%d/%m/%y %R"), to.format(to_format),)
 }
 
 fn dir() -> Result<PathBuf> {

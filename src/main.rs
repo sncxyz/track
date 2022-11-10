@@ -26,6 +26,15 @@ enum Command {
         #[arg(value_parser = parse_name)]
         name: String,
     },
+    /// Rename an activity
+    Rename {
+        /// Name of the activity to rename
+        #[arg(value_parser = parse_name)]
+        from: String,
+        /// New name
+        #[arg(value_parser = parse_name)]
+        to: String,
+    },
     /// Delete an activity
     Delete {
         /// Name of the activity to delete
@@ -153,31 +162,33 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    use Command::*;
     let cli = Cli::try_parse()?;
 
     match cli.command {
-        Command::New { name } => track::create(name),
-        Command::Set { name } => track::set(name),
-        Command::Delete { name } => track::delete(name),
-        Command::Current => track::current(),
-        Command::All => track::all(),
-        Command::Start => track::start(),
-        Command::End { notes } => track::end(notes),
-        Command::Cancel => track::cancel(),
-        Command::Ongoing => track::ongoing(),
-        Command::Add { start, end, notes } => track::add(start, end, notes),
-        Command::Edit {
+        New { name } => track::create(name),
+        Set { name } => track::set(name),
+        Delete { name } => track::delete(name),
+        Rename { from, to } => track::rename(from, to),
+        Current => track::current(),
+        All => track::all(),
+        Start => track::start(),
+        End { notes } => track::end(notes),
+        Cancel => track::cancel(),
+        Ongoing => track::ongoing(),
+        Add { start, end, notes } => track::add(start, end, notes),
+        Edit {
             position,
             start,
             end,
             notes,
         } => track::edit(position, start, end, notes),
-        Command::Remove { position } => track::remove(position),
-        Command::List { range_command } => {
+        Remove { position } => track::remove(position),
+        List { range_command } => {
             let (start, end) = get_bounds(range_command);
             track::list(start, end)
         }
-        Command::Stats { range_command } => {
+        Stats { range_command } => {
             let (start, end) = get_bounds(range_command);
             track::stats(start, end)
         }
@@ -269,6 +280,16 @@ pub enum Bound {
         hours: u32,
         minutes: u32,
     },
+}
+
+impl Bound {
+    fn is_none(&self) -> bool {
+        if let Bound::None = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
