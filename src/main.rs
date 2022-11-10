@@ -227,12 +227,13 @@ fn parse_notes(s: &str) -> Result<String, String> {
 
 fn parse_position(s: &str) -> Result<Position, String> {
     if s == "last" {
-        Ok(Position::Last)
+        return Ok(Position::Last);
     } else if let Ok(i) = s.parse() {
-        Ok(Position::Index(i))
-    } else {
-        Err("index must be either [last] or a non-negative integer".to_string())
+        if i > 0 {
+            return Ok(Position::Index(i));
+        }
     }
+    Err("index must be either [last] or a positive integer".to_string())
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate, String> {

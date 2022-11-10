@@ -387,7 +387,7 @@ impl Activity {
     }
 
     fn get(&self, index: usize) -> String {
-        format!("{:3}. {}", index, self.sessions[index])
+        format!("{:3}. {}", index + 1, self.sessions[index])
     }
 
     fn last(&self) -> usize {
@@ -403,7 +403,7 @@ impl Activity {
         }
         let i = match pos {
             Position::Last => self.last(),
-            Position::Index(i) => i,
+            Position::Index(i) => i - 1,
         };
         if i >= self.sessions.len() {
             bail!("error: No session of the current activity with this index exists")
