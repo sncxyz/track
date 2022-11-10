@@ -331,8 +331,10 @@ const EDIT_ABOUT: &str = "Edit a session
             [dd/mm/yy]       - 00:00 the day after dd/mm/yy
             [HH:MM]          - HH:MM on <START>'s date
             omitted          - leave unchanged
-            
-Omit <NOTES> to leave notes unchanged";
+
+<NOTES>:    [string]         - string
+            whitespace       - remove notes
+            omitted          - leave unchanged";
 
 const REMOVE_ABOUT: &str = "Remove a session
 
@@ -341,16 +343,16 @@ const REMOVE_ABOUT: &str = "Remove a session
 
 const LIST_ABOUT: &str = "Display full session history, or sessions in a specific time range
 
-Omit <COMMAND> for full session history";
+Omit [COMMAND] for full session history";
 
 const STATS_ABOUT: &str =
     "Display full session statistics, or sessions statistics in a specific time range
 
-Omit <COMMAND> for full session statistics";
+Omit [COMMAND] for full session statistics";
 
 const PAST_ABOUT: &str = "Sessions ranging between a specific amount of time in the past, and now
 
-Omit all arguments to start from the first session";
+Omit all arguments to start from the first recorded session";
 
 const SINCE_ABOUT: &str = "Sessions ranging between a specific time, and now
 
