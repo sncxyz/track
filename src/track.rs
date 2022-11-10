@@ -520,14 +520,17 @@ impl fmt::Display for Session {
 }
 
 fn dur_to_string(duration: Duration) -> String {
-    let hours = duration.num_hours();
-    let mins = duration.num_minutes() - hours * 60;
+    let mut hours = duration.num_hours();
+    let mut mins = duration.num_minutes() - hours * 60;
     let secs = duration.num_seconds() - hours * 60 * 60 - mins * 60;
-    if secs == 0 {
-        format!("{hours}h {mins}m")
-    } else {
-        format!("{hours}h {}m", mins + 1)
+    if secs > 0 {
+        mins += 1;
     }
+    if mins == 60 {
+        hours += 1;
+        mins = 0;
+    }
+    format!("{hours}h {mins}m")
 }
 
 fn dur_stat(duration: Duration) -> String {
