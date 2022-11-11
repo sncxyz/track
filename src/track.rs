@@ -29,14 +29,12 @@ pub fn create(name: String) -> Result<()> {
     while taken.contains(&id) {
         id += 1;
     }
-    println!("Created new activity \"{}\"", name);
-    if data.current.is_none() {
-        println!("Set current activity to \"{}\"", name);
-        data.current = Some(ActivityInfo::new(name.clone(), id));
-    }
-    data.all.push(ActivityInfo::new(name, id));
+    data.all.push(ActivityInfo::new(name.clone(), id));
+    data.current = Some(ActivityInfo::new(name.clone(), id));
     data.write()?;
     Activity::new().write(id)?;
+    println!("Created new activity \"{}\"", name);
+    println!("Set current activity to \"{}\"", name);
     Ok(())
 }
 
