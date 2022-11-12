@@ -174,6 +174,7 @@ pub fn ongoing() -> Result<()> {
             local.format("%d/%m/%y"),
             local.format("%R")
         );
+        println!("Current duration: {}", dur_to_string(Utc::now() - start));
     } else {
         println!("There is no ongoing session of activity \"{name}\"");
     }
@@ -249,8 +250,7 @@ pub fn list(from: Bound, to: Bound) -> Result<()> {
             String::new()
         } else {
             let range = range_to_string(from, to);
-            let duration = dur_to_string(to - from);
-            format!("from {} ({}) ", range, duration)
+            format!("from {} ", range)
         }
     );
     if i == j {
