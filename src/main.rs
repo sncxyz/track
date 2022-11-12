@@ -253,14 +253,14 @@ fn parse_date(s: &str) -> Result<NaiveDate, String> {
 }
 
 fn parse_abs(s: &str) -> Result<Absolute, String> {
-    if let Ok(date_time) = NaiveDateTime::parse_from_str(s, "%d/%m/%y %R") {
+    if let Ok(date_time) = NaiveDateTime::parse_from_str(s, "%d/%m/%y-%R") {
         return Ok(Absolute::DateTime(date_time));
     } else if let Ok(date) = NaiveDate::parse_from_str(s, "%d/%m/%y") {
         return Ok(Absolute::Date(date));
     } else if let Ok(time) = NaiveTime::parse_from_str(s, "%R") {
         return Ok(Absolute::Time(time));
     }
-    Err("must be in the form [dd/mm/yy] or [HH:MM] or [dd/mm/yy HH:MM]".to_string())
+    Err("must be in the form [dd/mm/yy] or [HH:MM] or [dd/mm/yy-HH:MM]".to_string())
 }
 
 #[derive(Clone)]
@@ -309,11 +309,11 @@ fn to_bound(abs: Option<Absolute>) -> Bound {
 
 const ADD_ABOUT: &str = "Add a new session
     
-<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<START>: [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
          [dd/mm/yy]       - 00:00 on dd/mm/yy
          [HH:MM]          - HH:MM on today's date
 
-<END>:   [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<END>:   [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
          [dd/mm/yy]       - 00:00 the day after dd/mm/yy
          [HH:MM]          - HH:MM on <START>'s date";
 
@@ -322,12 +322,12 @@ const EDIT_ABOUT: &str = "Edit a session
 <POSITION>: [index]          - index of the session, as shown in track list
             \"last\"           - last recorded session
     
-<START>:    [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<START>:    [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
             [dd/mm/yy]       - 00:00 on dd/mm/yy
             [HH:MM]          - HH:MM on today's date
             omitted          - leave unchanged
 
-<END>:      [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<END>:      [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
             [dd/mm/yy]       - 00:00 the day after dd/mm/yy
             [HH:MM]          - HH:MM on <START>'s date
             omitted          - leave unchanged
@@ -356,19 +356,19 @@ Omit all arguments to start from the first recorded session";
 
 const SINCE_ABOUT: &str = "Sessions ranging between a specific time, and now
 
-<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<START>: [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
          [dd/mm/yy]       - 00:00 on dd/mm/yy
          [HH:MM]          - HH:MM on today's date
          omitted          - start of first recorded session";
 
 const RANGE_ABOUT: &str = "Sessions ranging between two specific times
 
-<START>: [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<START>: [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
          [dd/mm/yy]       - 00:00 on dd/mm/yy
          [HH:MM]          - HH:MM on today's date
          omitted          - start of first recorded session
          
-<END>:   [dd/mm/yy HH:MM] - HH:MM on dd/mm/yy
+<END>:   [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
          [dd/mm/yy]       - 00:00 the day after dd/mm/yy
          [HH:MM]          - HH:MM on <START>'s date
          omitted          - end of last recorded session";
