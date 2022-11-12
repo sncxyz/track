@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Result};
 use bincode::{deserialize, serialize};
 use chrono::{
     serde::{ts_seconds, ts_seconds_option},
-    Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc,
+    Duration, Local, NaiveDateTime, TimeZone, Utc,
 };
 use serde::{Deserialize, Serialize};
 
@@ -555,7 +555,7 @@ fn dur_stat(duration: Duration) -> String {
 
 fn range_to_string(from: DateTime, to: DateTime) -> String {
     let (from, to) = (to_local(from), to_local(to));
-    let to_format = if from.date() == to.date() {
+    let to_format = if from.date_naive() == to.date_naive() {
         "%R"
     } else {
         "%d/%m/%y %R"
@@ -563,40 +563,32 @@ fn range_to_string(from: DateTime, to: DateTime) -> String {
     format!("{} to {}", from.format("%d/%m/%y %R"), to.format(to_format),)
 }
 
-fn dir() -> Result<PathBuf> {
-    Ok(dirs::data_local_dir()
-        .ok_or_else(|| anyhow!("error: Failed to find user data directory"))?
-        .join("track"))
-}
-
-fn parse_date_time(naive: NaiveDateTime) -> chrono::DateTime<Local> {
-    Local.from_local_datetime(&naive).unwrap()
-}
-
-fn parse_date(naive: NaiveDate) -> chrono::Date<Local> {
-    Local.from_local_date(&naive).unwrap()
-}
-
 fn to_local(date_time: DateTime) -> chrono::DateTime<Local> {
     date_time.into()
 }
 
-fn to_utc(date_time: chrono::DateTime<Local>) -> DateTime {
-    date_time.into()
+fn parse_dt(naive: NaiveDateTime) -> DateTime {
+    Local.from_local_datetime(&naive).unwrap().into()
 }
 
 fn parse_start(abs: Absolute) -> DateTime {
-    to_utc(match abs {
-        Absolute::DateTime(naive) => parse_date_time(naive),
-        Absolute::Date(naive) => parse_date(naive).and_hms(0, 0, 0),
-        Absolute::Time(naive) => Local::now().date().and_time(naive).unwrap(),
+    parse_dt(match abs {
+        Absolute::DateTime(naive) => naive,
+        Absolute::Date(naive) => naive.and_hms_opt(0, 0, 0).unwrap(),
+        Absolute::Time(naive) => Local::now().date_naive().and_time(naive),
     })
 }
 
 fn parse_end(abs: Absolute, start: DateTime) -> DateTime {
-    to_utc(match abs {
-        Absolute::DateTime(naive) => parse_date_time(naive),
-        Absolute::Date(naive) => parse_date(naive).succ().and_hms(0, 0, 0),
-        Absolute::Time(naive) => to_local(start).date().and_time(naive).unwrap(),
+    parse_dt(match abs {
+        Absolute::DateTime(naive) => naive,
+        Absolute::Date(naive) => naive.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        Absolute::Time(naive) => to_local(start).date_naive().and_time(naive),
     })
+}
+
+fn dir() -> Result<PathBuf> {
+    Ok(dirs::data_local_dir()
+        .ok_or_else(|| anyhow!("error: Failed to find user data directory"))?
+        .join("track"))
 }
