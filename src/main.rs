@@ -3,6 +3,7 @@ mod track;
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use clap::{Parser, Subcommand};
+use track::{commands, Absolute, Bound, Position};
 
 #[derive(Parser)]
 #[clap(about)]
@@ -166,31 +167,31 @@ fn run() -> Result<()> {
     let cli = Cli::try_parse()?;
 
     match cli.command {
-        New { name } => track::create(name),
-        Set { name } => track::set(name),
-        Delete { name } => track::delete(name),
-        Rename { from, to } => track::rename(from, to),
-        Current => track::current(),
-        All => track::all(),
-        Start => track::start(),
-        End { notes } => track::end(notes),
-        Cancel => track::cancel(),
-        Ongoing => track::ongoing(),
-        Add { start, end, notes } => track::add(start, end, notes),
+        New { name } => commands::create(name),
+        Set { name } => commands::set(name),
+        Delete { name } => commands::delete(name),
+        Rename { from, to } => commands::rename(from, to),
+        Current => commands::current(),
+        All => commands::all(),
+        Start => commands::start(),
+        End { notes } => commands::end(notes),
+        Cancel => commands::cancel(),
+        Ongoing => commands::ongoing(),
+        Add { start, end, notes } => commands::add(start, end, notes),
         Edit {
             position,
             start,
             end,
             notes,
-        } => track::edit(position, start, end, notes),
-        Remove { position } => track::remove(position),
+        } => commands::edit(position, start, end, notes),
+        Remove { position } => commands::remove(position),
         List { range_command } => {
             let (start, end) = get_bounds(range_command);
-            track::list(start, end)
+            commands::list(start, end)
         }
         Stats { range_command } => {
             let (start, end) = get_bounds(range_command);
-            track::stats(start, end)
+            commands::stats(start, end)
         }
     }
 }
@@ -261,42 +262,6 @@ fn parse_abs(s: &str) -> Result<Absolute, String> {
         return Ok(Absolute::Time(time));
     }
     Err("must be in the form [dd/mm/yy] or [HH:MM] or [dd/mm/yy-HH:MM]".to_string())
-}
-
-#[derive(Clone)]
-pub enum Position {
-    Index(usize),
-    Last,
-}
-
-#[derive(Clone, Copy)]
-pub enum Bound {
-    None,
-    Now,
-    Absolute(Absolute),
-    Ago {
-        weeks: u32,
-        days: u32,
-        hours: u32,
-        minutes: u32,
-    },
-}
-
-impl Bound {
-    fn is_none(&self) -> bool {
-        if let Bound::None = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum Absolute {
-    DateTime(NaiveDateTime),
-    Date(NaiveDate),
-    Time(NaiveTime),
 }
 
 fn to_bound(abs: Option<Absolute>) -> Bound {
