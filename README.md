@@ -13,10 +13,10 @@ A CLI for tracking time spent on different activities
 | Command | Description                                                                         |
 | ------- | ----------------------------------------------------------------------------------- |
 | new     | Create a new activity to track                                                      |
-| set     | Set the activity that other commands should act on                                  |  
+| set     | Set the active activity that other commands should act on                           |  
 | rename  | Rename an activity                                                                  |  
 | delete  | Delete an activity                                                                  |
-| current | Display the name of the current activity                                            |
+| current | Display the name of the active activity                                             |
 | all     | Display the names of all tracked activities                                         |
 | start   | Start tracking a session                                                            |
 | end     | End tracking of the ongoing session                                                 |

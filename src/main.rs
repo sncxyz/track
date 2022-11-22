@@ -21,7 +21,7 @@ enum Command {
         #[arg(value_parser = parse_name)]
         name: String,
     },
-    /// Set the activity that other commands should act on
+    /// Set the active activity that other commands should act on
     Set {
         /// Name of the activity
         #[arg(value_parser = parse_name)]
@@ -42,8 +42,8 @@ enum Command {
         #[arg(value_parser = parse_name)]
         name: String,
     },
-    /// Display the name of the current activity
-    Current,
+    /// Display the name of the active activity
+    Active,
     /// Display the names of all tracked activities
     All,
     /// Start tracking a session
@@ -171,7 +171,7 @@ fn run() -> Result<()> {
         Set { name } => commands::set(name),
         Delete { name } => commands::delete(name),
         Rename { from, to } => commands::rename(from, to),
-        Current => commands::current(),
+        Active => commands::current(),
         All => commands::all(),
         Start => commands::start(),
         End { notes } => commands::end(notes),

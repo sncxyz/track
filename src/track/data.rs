@@ -9,8 +9,8 @@ use crate::track::DateTime;
 
 #[derive(Serialize, Deserialize)]
 pub struct Data {
-    pub current: Option<ActivityInfo>,
-    pub all: Vec<ActivityInfo>,
+    pub active: Option<ActivityInfo>,
+    pub activities: Vec<ActivityInfo>,
 }
 
 impl Data {
@@ -19,8 +19,8 @@ impl Data {
             deserialize(&encoded)?
         } else {
             Self {
-                current: None,
-                all: Vec::new(),
+                active: None,
+                activities: Vec::new(),
             }
         })
     }
@@ -34,10 +34,10 @@ impl Data {
     }
 
     pub fn delete(&mut self, i: usize) -> Result<()> {
-        let removed = self.all.remove(i);
-        if let Some(current) = &self.current {
+        let removed = self.activities.remove(i);
+        if let Some(current) = &self.active {
             if current.id == removed.id {
-                self.current = None;
+                self.active = None;
             }
         }
         fs::remove_file(dir()?.join(removed.id.to_string()))?;
@@ -45,18 +45,18 @@ impl Data {
     }
 
     pub fn read_current(&self) -> Result<(Activity, &str)> {
-        if let Some(info) = &self.current {
+        if let Some(info) = &self.active {
             Ok((
                 deserialize(&fs::read(dir()?.join(info.id.to_string()))?)?,
                 &info.name,
             ))
         } else {
-            bail!("error: No activity currently selected")
+            bail!("error: No activity currently active")
         }
     }
 
     pub fn write_current(&self, activity: &Activity) -> Result<()> {
-        activity.write(self.current.as_ref().unwrap().id)
+        activity.write(self.active.as_ref().unwrap().id)
     }
 }
 

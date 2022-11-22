@@ -14,32 +14,32 @@ use crate::track::{
 
 pub fn create(name: String) -> Result<()> {
     let mut data = Data::read()?;
-    for info in &data.all {
+    for info in &data.activities {
         if info.name == name {
             bail!("error: An activity with this name already exists");
         }
     }
-    let taken: HashSet<_> = data.all.iter().map(|info| info.id).collect();
+    let taken: HashSet<_> = data.activities.iter().map(|info| info.id).collect();
     let mut id = 0;
     while taken.contains(&id) {
         id += 1;
     }
-    data.all.push(ActivityInfo::new(name.clone(), id));
-    data.current = Some(ActivityInfo::new(name.clone(), id));
+    data.activities.push(ActivityInfo::new(name.clone(), id));
+    data.active = Some(ActivityInfo::new(name.clone(), id));
     data.write()?;
     Activity::new().write(id)?;
-    println!("Created new activity \"{}\"", name);
-    println!("Set current activity to \"{}\"", name);
+    println!("Created new activity \"{name}\"");
+    println!("\"{name}\" is now active");
     Ok(())
 }
 
 pub fn set(name: String) -> Result<()> {
     let mut data = Data::read()?;
-    for info in &data.all {
+    for info in &data.activities {
         if info.name == name {
-            data.current = Some(info.clone());
+            data.active = Some(info.clone());
             data.write()?;
-            println!("Set current activity to \"{name}\"");
+            println!("\"{name}\" is now active");
             return Ok(());
         }
     }
@@ -48,12 +48,12 @@ pub fn set(name: String) -> Result<()> {
 
 pub fn rename(from: String, to: String) -> Result<()> {
     let mut data = Data::read()?;
-    for info in &mut data.all {
+    for info in &mut data.activities {
         if info.name == from {
             info.name = to.clone();
-            if let Some(current) = &data.current {
+            if let Some(current) = &data.active {
                 if current.id == info.id {
-                    data.current = Some(info.clone());
+                    data.active = Some(info.clone());
                 }
             }
             data.write()?;
@@ -66,7 +66,7 @@ pub fn rename(from: String, to: String) -> Result<()> {
 
 pub fn delete(name: String) -> Result<()> {
     let mut data = Data::read()?;
-    for (i, info) in data.all.iter().enumerate() {
+    for (i, info) in data.activities.iter().enumerate() {
         if info.name == name {
             print!("Are you sure you want to delete activity \"{name}\"? Enter \"y\" if so: ");
             io::stdout().flush()?;
@@ -85,21 +85,21 @@ pub fn delete(name: String) -> Result<()> {
 }
 
 pub fn current() -> Result<()> {
-    if let Some(info) = &Data::read()?.current {
-        println!("The current activity is \"{}\"", info.name);
+    if let Some(info) = &Data::read()?.active {
+        println!("\"{}\" is active", info.name);
     } else {
-        println!("There is no activity currently selected");
+        println!("There is no activity currently active");
     }
     Ok(())
 }
 
 pub fn all() -> Result<()> {
     let data = Data::read()?;
-    if data.all.is_empty() {
+    if data.activities.is_empty() {
         println!("There are currently no recorded activities");
     } else {
         println!("The recorded activities are:");
-        for info in &data.all {
+        for info in &data.activities {
             println!("{}", info.name);
         }
     }
@@ -110,13 +110,13 @@ pub fn start() -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
     if current.ongoing.is_some() {
-        bail!("There is already an ongoing session of activity \"{name}\"");
+        bail!("There is already an ongoing session of \"{name}\"");
     }
     current.ongoing = Some(Utc::now());
     let local = to_local(current.ongoing.unwrap());
     data.write_current(&current)?;
     println!(
-        "Started new session of activity \"{name}\" on {} at {}",
+        "Started new session of \"{name}\" on {} at {}",
         local.format("%d/%m/%y"),
         local.format("%R")
     );
@@ -131,11 +131,11 @@ pub fn end(notes: String) -> Result<()> {
         let end = Utc::now();
         current.sessions.push(Session::new(start, end, notes));
         data.write_current(&current)?;
-        println!("Ended session of activity \"{name}\"");
+        println!("Ended session of \"{name}\"");
         println!("New session:");
         println!("{}", current.get(current.last()));
     } else {
-        bail!("error: There is no ongoing session of activity \"{name}\"");
+        bail!("error: There is no ongoing session of \"{name}\"");
     }
     Ok(())
 }
@@ -146,10 +146,10 @@ pub fn cancel() -> Result<()> {
     if current.ongoing.is_some() {
         current.ongoing = None;
         data.write_current(&current)?;
-        println!("Cancelled ongoing session of activity \"{name}\"");
+        println!("Cancelled ongoing session of \"{name}\"");
         return Ok(());
     }
-    bail!("error: There is no ongoing session of activity \"{name}\"");
+    bail!("error: There is no ongoing session of \"{name}\"");
 }
 
 pub fn ongoing() -> Result<()> {
@@ -158,13 +158,13 @@ pub fn ongoing() -> Result<()> {
     if let Some(start) = current.ongoing {
         let local = to_local(start);
         println!(
-            "There is an ongoing session of activity \"{name}\" that started on {} at {}",
+            "There is an ongoing session of \"{name}\" that started on {} at {}",
             local.format("%d/%m/%y"),
             local.format("%R")
         );
         println!("Current duration: {}", dur_to_string(Utc::now() - start));
     } else {
-        println!("There is no ongoing session of activity \"{name}\"");
+        println!("There is no ongoing session of \"{name}\"");
     }
     Ok(())
 }
@@ -176,7 +176,7 @@ pub fn add(start: Absolute, end: Absolute, notes: String) -> Result<()> {
     let end = parse_end(end, start);
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
-    println!("Added a new session of activity \"{name}\":");
+    println!("Added a new session of \"{name}\":");
     println!("{}", current.get(i));
     Ok(())
 }
@@ -200,7 +200,7 @@ pub fn edit(
     let notes = notes.unwrap_or_else(|| old.notes.clone());
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
-    println!("Edited session of activity \"{name}\" from:");
+    println!("Edited session of \"{name}\" from:");
     println!("{old_string}");
     println!("to:");
     println!("{}", current.get(i));
@@ -212,7 +212,7 @@ pub fn remove(pos: Position) -> Result<()> {
     let (mut current, name) = data.read_current()?;
     let i = current.parse_index(pos)?;
     println!("{}", current.get(i));
-    print!("Are you sure you want to remove this session from activity \"{name}\"? Enter \"y\" if so: ");
+    print!("Are you sure you want to remove this session from \"{name}\"? Enter \"y\" if so: ");
     io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
@@ -233,7 +233,7 @@ pub fn list(from: Bound, to: Bound) -> Result<()> {
     let (from, to) = current.convert_bounds(from, to)?;
     let (i, j) = current.get_in_range(from, to);
     let text = format!(
-        "{}in activity \"{name}\"",
+        "{}in \"{name}\"",
         if all {
             String::new()
         } else {
@@ -260,9 +260,9 @@ pub fn stats(from: Bound, to: Bound) -> Result<()> {
     let range = range_to_string(from, to);
     let duration = dur_stat(to - from);
     if i == j {
-        println!("There are no recorded sessions from {range} in activity \"{name}\"")
+        println!("There are no recorded sessions from {range} in \"{name}\"")
     } else {
-        println!("The sessions statistics from {range} ({duration}) in activity \"{name}\" are:");
+        println!("The sessions statistics from {range} ({duration}) in \"{name}\" are:");
         println!("Number of sessions: {}", j - i);
         let mut time = Duration::zero();
         for (k, session) in current.sessions.iter().enumerate().take(j).skip(i) {
@@ -331,21 +331,21 @@ impl Activity {
 
     fn parse_index(&self, pos: Position) -> Result<usize> {
         if self.sessions.is_empty() {
-            bail!("error: There are no recorded sessions of the current activity");
+            bail!("error: There are no recorded sessions of the active activity");
         }
         let i = match pos {
             Position::Last => self.last(),
             Position::Index(i) => i - 1,
         };
         if i >= self.sessions.len() {
-            bail!("error: No session of the current activity with this index exists")
+            bail!("error: No session of the active activity with this index exists")
         }
         Ok(i)
     }
 
     fn convert_bounds(&self, from: Bound, to: Bound) -> Result<(DateTime, DateTime)> {
         if self.sessions.is_empty() {
-            bail!("There are no recorded sessions of the current activity");
+            bail!("There are no recorded sessions of the active activity");
         }
         let now = Utc::now();
         let from = match from {
