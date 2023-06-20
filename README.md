@@ -23,7 +23,8 @@ A CLI for tracking time spent on different activities
 | cancel  | Cancel tracking of the ongoing session                                              |
 | ongoing | Display details of the ongoing session                                              |
 | add     | Add a new session                                                                   |
+| past    | Add a new session that ends at the current time                                     |
 | edit    | Edit a session                                                                      |
 | remove  | Remove a session                                                                    |
-| list    | Display full session history, or sessions in a specific time range                  |
+| view    | Display full session history, or sessions in a specific time range                  |
 | stats   | Display full session statistics, or session statistics in a specific time range     |

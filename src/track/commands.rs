@@ -172,8 +172,28 @@ pub fn ongoing() -> Result<()> {
 pub fn add(start: Absolute, end: Absolute, notes: String) -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
+    check_ongoing(&current, name)?;
     let start = parse_start(start);
     let end = parse_end(end, start);
+    let i = current.add(start, end, notes)?;
+    data.write_current(&current)?;
+    println!("Added a new session of \"{name}\":");
+    println!("{}", current.get(i));
+    Ok(())
+}
+
+pub fn past(weeks: u32, days: u32, hours: u32, minutes: u32, notes: String) -> Result<()> {
+    let data = Data::read()?;
+    let (mut current, name) = data.read_current()?;
+    check_ongoing(&current, name)?;
+    if weeks == 0 && days == 0 && hours == 0 && minutes == 0 {
+        bail!("error: Duration must be positive");
+    }
+    let end = Utc::now();
+    let start = end
+        - Duration::minutes(
+            minutes as i64 + hours as i64 * 60 + days as i64 * 24 * 60 + weeks as i64 * 7 * 24 * 60,
+        );
     let i = current.add(start, end, notes)?;
     data.write_current(&current)?;
     println!("Added a new session of \"{name}\":");
@@ -189,6 +209,7 @@ pub fn edit(
 ) -> Result<()> {
     let data = Data::read()?;
     let (mut current, name) = data.read_current()?;
+    check_ongoing(&current, name)?;
     let i = current.parse_index(pos)?;
     if start.is_none() && end.is_none() && notes.is_none() {
         bail!("error: No edits specified")
@@ -226,7 +247,7 @@ pub fn remove(pos: Position) -> Result<()> {
     Ok(())
 }
 
-pub fn list(from: Bound, to: Bound) -> Result<()> {
+pub fn view(from: Bound, to: Bound) -> Result<()> {
     let all = from.is_none() && to.is_none();
     let data = Data::read()?;
     let (current, name) = data.read_current()?;
@@ -476,4 +497,16 @@ fn range_to_string(from: DateTime, to: DateTime) -> String {
         "%d/%m/%y %R"
     };
     format!("{} to {}", from.format("%d/%m/%y %R"), to.format(to_format),)
+}
+
+fn check_ongoing(current: &Activity, name: &str) -> Result<()> {
+    if let Some(ongoing) = current.ongoing {
+        let local = to_local(ongoing);
+        bail!(
+            "error: There is already an ongoing session of \"{name}\" that started on {} at {}",
+            local.format("%d/%m/%y"),
+            local.format("%R")
+        );
+    }
+    Ok(())
 }

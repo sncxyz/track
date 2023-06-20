@@ -73,6 +73,24 @@ enum Command {
         #[arg(short, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
         notes: String,
     },
+    #[clap(about = "Add a new session that ends at the current time")]
+    Past {
+        /// Number of weeks
+        #[arg(short, default_value_t = 0, hide_default_value = true)]
+        weeks: u32,
+        /// Number of days
+        #[arg(short, default_value_t = 0, hide_default_value = true)]
+        days: u32,
+        /// Number of hours
+        #[arg(short = 'H', default_value_t = 0, hide_default_value = true)]
+        hours: u32,
+        /// Number of minutes
+        #[arg(short = 'M', default_value_t = 0, hide_default_value = true)]
+        minutes: u32,
+        /// Optional notes
+        #[arg(short, value_parser = parse_notes, default_value_t = String::new(), hide_default_value = true)]
+        notes: String,
+    },
     #[clap(
         about = "Edit a session",
         long_about = EDIT_ABOUT
@@ -101,8 +119,8 @@ enum Command {
     },
     #[clap(
         about = "Display full session history, or sessions in a specific time range",
-        long_about = LIST_ABOUT)]
-    List {
+        long_about = VIEW_ABOUT)]
+    View {
         #[command(subcommand)]
         range_command: Option<RangeCommand>,
     },
@@ -178,6 +196,13 @@ fn run() -> Result<()> {
         Cancel => commands::cancel(),
         Ongoing => commands::ongoing(),
         Add { start, end, notes } => commands::add(start, end, notes),
+        Past {
+            weeks,
+            days,
+            hours,
+            minutes,
+            notes,
+        } => commands::past(weeks, days, hours, minutes, notes),
         Edit {
             position,
             start,
@@ -185,9 +210,9 @@ fn run() -> Result<()> {
             notes,
         } => commands::edit(position, start, end, notes),
         Remove { position } => commands::remove(position),
-        List { range_command } => {
+        View { range_command } => {
             let (start, end) = get_bounds(range_command);
-            commands::list(start, end)
+            commands::view(start, end)
         }
         Stats { range_command } => {
             let (start, end) = get_bounds(range_command);
@@ -284,7 +309,7 @@ const ADD_ABOUT: &str = "Add a new session
 
 const EDIT_ABOUT: &str = "Edit a session
 
-<POSITION>: [index]          - index of the session, as shown in track list
+<POSITION>: [index]          - index of the session, as shown in track view
             \"last\"           - last recorded session
     
 <START>:    [dd/mm/yy-HH:MM] - HH:MM on dd/mm/yy
@@ -303,10 +328,10 @@ const EDIT_ABOUT: &str = "Edit a session
 
 const REMOVE_ABOUT: &str = "Remove a session
 
-<POSITION>: [index]          - index of the session, as shown in track list
+<POSITION>: [index]          - index of the session, as shown in track view
             \"last\"           - last recorded session";
 
-const LIST_ABOUT: &str = "Display full session history, or sessions in a specific time range
+const VIEW_ABOUT: &str = "Display full session history, or sessions in a specific time range
 
 Omit [COMMAND] for full session history";
 

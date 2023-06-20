@@ -1,6 +1,5 @@
 pub mod commands;
 mod data;
-mod table;
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
@@ -34,10 +33,6 @@ pub enum Bound {
 
 impl Bound {
     fn is_none(&self) -> bool {
-        if let Bound::None = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Bound::None)
     }
 }
