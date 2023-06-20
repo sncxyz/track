@@ -4,7 +4,7 @@ A CLI for tracking time spent on different activities
 
 ## Installation
 
-`cargo install --git https://github.com/scjqt/track`
+`cargo install --git https://github.com/sncxyz/track`
 
 ## Usage
 
